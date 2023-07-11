@@ -1,0 +1,110 @@
+import React, {
+	useState,
+	useEffect,
+	useCallback,
+	useContext,
+	createContext,
+} from 'react';
+import AsyncStorage from '@react-native-community/async-storage';
+import {api} from '../services/api';
+
+interface AuthState {
+	token: string;
+	user: object;
+}
+
+interface SignInCredentials {
+	email: string;
+	password: string;
+}
+
+interface IUser {
+	id: string;
+	name: string;
+	email: string;
+	avatar: string;
+}
+
+interface AuthContextData {
+	user: IUser;
+	loading: boolean;
+	signIn(credentials: SignInCredentials): Promise<void>;
+	signOut(): void;
+	updateUser(user: IUser): Promise<void>
+}
+
+interface ProviderProps {
+	children: React.ReactNode
+}
+
+const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+
+export const AuthProvider: React.FC = ({children}: ProviderProps) => {
+	const [data, setData] = useState<AuthState>({} as AuthState);
+	const [loading, setLoading] = useState(true);
+
+	useEffect(() => {
+		async function loadStorageData(): Promise<void> {
+			const [token, user] = await AsyncStorage.multiGet([
+				'@GoBarber:token',
+				'@GoBarber:user',
+			]);
+
+			if (token[1] && user[1]) {
+				setData({token: token[1], user: JSON.parse(user[1])});
+				api.defaults.headers.authorization = `Bearer ${token[1]}`;
+			}
+			setLoading(false);
+		}
+
+		loadStorageData();
+	}, []);
+
+	const signIn = useCallback(async ({email, password}: SignInCredentials) => {
+		const response = await api.post('/sessions', {email, password});
+
+		const {token, user} = response.data;
+
+		await AsyncStorage.multiSet([
+			['@GoBarber:token', token],
+			['@GoBarber:user', JSON.stringify(user)],
+		]);
+
+		api.defaults.headers.authorization = `Bearer ${token}`;
+
+		setData({token, user});
+	}, []);
+
+	const signOut = useCallback(async () => {
+		await AsyncStorage.multiRemove(['@GoBarber:token', '@GoBarber:user']);
+
+		setData({} as AuthState);
+	}, []);
+
+	const updateUser = useCallback(
+		async (user: IUser) => {
+			await AsyncStorage.setItem("@GoBarber:user", JSON.stringify(user));
+
+			setData({
+				token: data.token,
+				user,
+			});
+		},
+		[setData, data.token],
+	);
+
+	return (
+		<AuthContext.Provider value={{user: data.user as IUser, loading, updateUser, signIn, signOut}}>
+			{children}
+		</AuthContext.Provider>
+	);
+};
+
+export function useAuth(): AuthContextData {
+	const context = useContext(AuthContext);
+
+	if (!context) throw new Error('useAuth must be used within an AuthProvider');
+
+	return context;
+}
+

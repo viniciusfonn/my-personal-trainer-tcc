@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String   @id @default(uuid())
+  name             String
+  email            String
+  password         String
+  avatar           String?
+  provider_info_id String?  @unique
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now())
+
+  UserTokens            UserToken[]
+  appointmentsScheduled Appointment[]        @relation("user")
+  appointmentsProvided Appointment[] @relation("provider")
+  ProviderInfo          ProviderInfo?
+  Notifications         UsersNotifications[]
+
+  @@map("users")
+}
+
+model ProviderInfo {
+  id                   String        @id @default(uuid())
+  user_id              String        @unique
+  description          String?
+  startHour            Int
+  endHour              Int
+  category_id          String
+  created_at           DateTime      @default(now())
+  updated_at           DateTime      @default(now())
+
+  userRelated User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@map("providers_info")
+}
+
+model Category {
+  id       String @id @default(uuid())
+  category String @unique
+
+  Providers ProviderInfo[]
+
+  @@map("categories")
+}
+
+model Appointment {
+  id          String   @id @default(uuid())
+  provider_id String
+  user_id     String
+  date        DateTime
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
+
+  providedBy  User @relation("provider", fields: [provider_id], references: [id], onDelete: Cascade)
+  scheduledBy User         @relation("user", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
+
+model UserToken {
+  id         String   @id @default(uuid())
+  token      String   @default(uuid())
+  user_id    String
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_tokens")
+}
+
+model Notification {
+  id           String   @id @default(uuid())
+  content      String
+  recipient_id String
+  read         Boolean  @default(false)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @default(now())
+
+  users UsersNotifications[]
+
+  @@map("notifications")
+}
+
+model UsersNotifications {
+  user            User         @relation(fields: [user_id], references: [id])
+  notification    Notification @relation(fields: [notification_id], references: [id])
+  notification_id String
+  user_id         String
+  assignedAt      DateTime     @default(now())
+
+  @@id([user_id, notification_id])
+  @@map("users_notifications")
+}
